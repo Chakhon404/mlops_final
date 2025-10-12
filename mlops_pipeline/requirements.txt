@@ -1,0 +1,7 @@
+numpy<2.0
+pandas
+scikit-learn>=1.2
+mlflow
+datasets>=2.20.0
+fastapi
+uvicorn[standard]

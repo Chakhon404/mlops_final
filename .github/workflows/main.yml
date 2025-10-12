@@ -1,0 +1,48 @@
+name: MLOps Pipeline CI/CT/CD
+on:
+  push: { branches: [ "main" ] }
+  pull_request: { branches: [ "main" ] }
+jobs:
+  ci-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with: { python-version: '3.10' }
+    - name: Install deps
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r mlops_pipeline/requirements.txt
+        pip install flake8 pytest
+    - name: Lint
+      run: |
+        flake8 mlops_pipeline/scripts --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 mlops_pipeline/scripts --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test
+      run: |
+        pytest || (if [ $? -eq 5 ]; then echo "No tests found."; exit 0; else exit $?; fi)
+  build-and-train:
+    needs: ci-checks
+    runs-on: ubuntu-latest
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with: { python-version: '3.10' }
+    - name: Install deps
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r mlops_pipeline/requirements.txt
+    - name: Preprocess
+      id: preprocessing
+      run: python mlops_pipeline/scripts/02_data_preprocessing.py
+    - name: Train & Register
+      run: python mlops_pipeline/scripts/03_train_evaluate_register.py ${{ steps.preprocessing.outputs.run_id }} 2.0 200000
+    - name: Set alias Staging
+      run: python mlops_pipeline/scripts/04_transition_model.py "dbpedia14-classifier-prod" "Staging"
+    - name: Upload mlruns
+      uses: actions/upload-artifact@v4
+      with: { name: mlruns, path: mlruns/ }
