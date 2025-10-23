@@ -1,7 +1,9 @@
 numpy<2.0
 pandas
-scikit-learn>=1.2
+scikit-learn
 mlflow
-datasets>=2.20.0
-fastapi
-uvicorn[standard]
+matplotlib
+requests
+flake8
+pytest
+nltk

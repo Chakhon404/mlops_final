@@ -1,74 +1,165 @@
-import os, re, sys, subprocess
-import mlflow
+import os, json, hashlib, io
+from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import mlflow
 
-MLOPS_DIR = os.path.dirname(os.path.dirname(__file__))
-DATA_DIR = os.path.join(MLOPS_DIR, "data")
-RAW_CSV  = os.path.join(DATA_DIR, "data.csv")
-PROC_DIR = os.path.join(MLOPS_DIR, "processed_data")
-TRAIN_OUT = os.path.join(PROC_DIR, "train.csv")
-TEST_OUT  = os.path.join(PROC_DIR, "test.csv")
+MLFLOW_EXPERIMENT = "MentalHealth - Data Preprocessing"
+MODEL_NAME = "mental-health-classifier"  # (ยังไม่ได้ใช้ในสเต็ปนี้ แต่เก็บไว้ได้)
 
-LABELS = ["Anxiety","Bipolar","Depression","Normal","Personality Disorder","Stress","Suicidal"]
-LABEL_MAP = {k.lower(): i for i,k in enumerate(LABELS)}
+# --- Fallback clean_text ---
+try:
+    from common_text import clean_text as _external_clean_text
+    def clean_text(s: str) -> str:
+        return _external_clean_text(s)
+except Exception:
+    import re
+    def clean_text(s: str) -> str:
+        if s is None:
+            return ""
+        s = str(s)
+        s = s.replace("\u200b", "")  # zero-width
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
 
-def clean_text(s:str)->str:
-    s = s or ""
-    s = s.replace("\u200d"," ").replace("\u2060"," ")
-    s = re.sub(r"https?://\S+|www\.\S+"," ", s)
-    s = re.sub(r"<[^>]+>"," ", s)
-    s = re.sub(r"[^\w\s\.,!?'\-]"," ", s)
-    s = re.sub(r"\s+"," ", s).strip().lower()
-    return s
+def sha256_of_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-def ensure_data():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if os.path.exists(RAW_CSV):
-        return
-    try:
-        cmd = ["kaggle","datasets","download","-d","suchintikasarkar/sentiment-analysis-for-mental-health","-p", DATA_DIR]
-        subprocess.run(cmd, check=True)
-        import glob, zipfile
-        zips = sorted(glob.glob(os.path.join(DATA_DIR,"*.zip")), key=os.path.getmtime, reverse=True)
-        with zipfile.ZipFile(zips[0], "r") as zf:
-            zf.extractall(DATA_DIR)
-    except Exception as e:
-        print("[WARN] Kaggle API failed:", e, file=sys.stderr)
-        if not os.path.exists(RAW_CSV):
-            raise FileNotFoundError("กรุณาวาง data.csv ไว้ที่ mlops_pipeline/data/ หรือเตรียม Kaggle API ให้พร้อม")
-
-def main():
-    mlflow.set_experiment("MH - Data Preprocessing")
-    with mlflow.start_run(run_name="clean_split_save") as run:
+def main(test_size=0.2, val_size=0.1, random_state=42):
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    with mlflow.start_run() as run:
         run_id = run.info.run_id
-        mlflow.set_tag("ml.step","data_preprocessing")
-        ensure_data()
+        mlflow.set_tag("ml.step", "data_preprocessing")
 
-        df = pd.read_csv(RAW_CSV)
-        if not {"statement","status"}.issubset(df.columns):
-            raise KeyError("ต้องมีคอลัมน์ 'statement' และ 'status' ใน data.csv")
-        df = df[["statement","status"]].dropna()
-        df["status_norm"] = df["status"].astype(str).str.lower().str.strip()
-        df = df[df["status_norm"].isin(LABEL_MAP.keys())]
-        df["text"] = df["statement"].astype(str).map(clean_text)
-        df = df[df["text"].str.split().str.len() >= 3].drop_duplicates(subset=["text","status_norm"])
-        df["label"] = df["status_norm"].map(LABEL_MAP)
+        data_csv = os.getenv("DATA_CSV", "data/mental_health.csv")
+        data_csv_path = Path(data_csv)
+        if not data_csv_path.exists():
+            # เผื่อคุณรันบนสภาพแวดล้อมที่มีไฟล์ใน /mnt/data (เช่น Colab/VM)
+            alt = Path("/mnt/data/mental_health.csv")
+            if alt.exists():
+                data_csv_path = alt
+        df = pd.read_csv(data_csv_path)
 
-        train, test = train_test_split(df[["text","label"]], test_size=0.2, random_state=42, stratify=df["label"])
+        # hash ของไฟล์ดิบ
+        try:
+            data_hash = sha256_of_file(data_csv_path)
+            mlflow.log_param("data_version_sha256", data_hash)
+        except Exception:
+            pass
 
-        os.makedirs(PROC_DIR, exist_ok=True)
-        train.to_csv(TRAIN_OUT, index=False)
-        test.to_csv(TEST_OUT, index=False)
+        # normalize column names
+        cols_lower = {c.lower(): c for c in df.columns}
+        text_col = cols_lower.get("text") or cols_lower.get("statement") or list(df.columns)[0]
+        label_col = cols_lower.get("label") or cols_lower.get("status") or list(df.columns)[1]
+        df = df.rename(columns={text_col: "text", label_col: "label"})
 
-        mlflow.log_metric("training_set_rows", len(train))
-        mlflow.log_metric("test_set_rows", len(test))
-        mlflow.log_param("num_classes", len(LABELS))
-        mlflow.log_artifacts(PROC_DIR, artifact_path="processed_data")
-        print(f"Preprocessing Run ID: {run_id}")
-        if "GITHUB_OUTPUT" in os.environ:
-            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-                print(f"run_id={run_id}", file=f)
+        # basic cleaning
+        raw_rows = len(df)
+        df["text"] = df["text"].fillna("").astype(str).apply(clean_text)
+
+        # drop obviously bad tokens
+        bad_tokens = {"", "nan", "none", "null"}
+        mask_bad = df["text"].str.strip().str.lower().isin(bad_tokens)
+        n_bad = int(mask_bad.sum())
+        df = df[~mask_bad]
+
+        # drop NaN labels
+        n_label_na = int(df["label"].isna().sum())
+        df = df[df["label"].notna()].copy()
+
+        # drop duplicate texts (optional แต่ดีต่อคุณภาพ)
+        before_dedup = len(df)
+        df = df.drop_duplicates(subset=["text"])
+        n_dupes = before_dedup - len(df)
+
+        # label mapping
+        labels = sorted(df["label"].unique().tolist())
+        label2id = {c: i for i, c in enumerate(labels)}
+        id2label = {i: c for c, i in label2id.items()}
+        df["label_id"] = df["label"].map(label2id)
+
+        # log distributions BEFORE split
+        label_counts = df["label"].value_counts().to_dict()
+        mlflow.log_dict(label_counts, "pre_split_label_counts.json")
+        mlflow.log_param("n_classes", len(labels))
+
+        # --- stratify safety check ---
+        # sklearn ต้องการอย่างน้อย 2 ตัวอย่างต่อคลาสเพื่อ stratify
+        too_small = {k: v for k, v in label_counts.items() if v < 2}
+        if len(too_small) > 0:
+            # ทางเลือก: ตัดคลาสเล็กทิ้งก่อน split (หรือ raise Exception)
+            # ที่นี่จะตัดทิ้งและ log เตือน
+            drop_idxs = df["label"].isin(list(too_small.keys()))
+            mlflow.log_dict(too_small, "dropped_tiny_classes.json")
+            df = df[~drop_idxs].copy()
+
+        # split
+        train_df, test_df = train_test_split(
+            df[["text", "label_id"]],
+            test_size=test_size,
+            random_state=random_state,
+            stratify=df["label_id"]
+        )
+        train_df, val_df = train_test_split(
+            train_df,
+            test_size=val_size,
+            random_state=random_state,
+            stratify=train_df["label_id"]
+        )
+
+        # out dir
+        outdir = Path("processed_data")
+        outdir.mkdir(exist_ok=True, parents=True)
+        train_df.to_csv(outdir / "train.csv", index=False)
+        val_df.to_csv(outdir / "val.csv", index=False)
+        test_df.to_csv(outdir / "test.csv", index=False)
+
+        with open(outdir / "label_mapping.json", "w", encoding="utf-8") as f:
+            json.dump({"label2id": label2id, "id2label": id2label}, f, ensure_ascii=False, indent=2)
+
+        # save a small sample for human inspection
+        sample_lines = (
+            train_df.head(50)
+            .assign(label=train_df["label_id"].map(id2label))
+            [["text", "label", "label_id"]]
+            .to_dict(orient="records")
+        )
+        with open(outdir / "sample.jsonl", "w", encoding="utf-8") as f:
+            for rec in sample_lines:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+        # log split distributions
+        def counts(df_):
+            return df_["label_id"].value_counts().sort_index().to_dict()
+
+        mlflow.log_dict(counts(train_df), "split_counts_train.json")
+        mlflow.log_dict(counts(val_df),   "split_counts_val.json")
+        mlflow.log_dict(counts(test_df),  "split_counts_test.json")
+
+        # params/metrics
+        mlflow.log_param("test_size", test_size)
+        mlflow.log_param("val_size", val_size)
+        mlflow.log_param("random_state", random_state)
+
+        mlflow.log_metric("raw_rows", raw_rows)
+        mlflow.log_metric("rows_after_clean", len(df))
+        mlflow.log_metric("dropped_bad_text", n_bad)
+        mlflow.log_metric("dropped_label_na", n_label_na)
+        mlflow.log_metric("dropped_duplicates", n_dupes)
+        mlflow.log_metric("train_rows", len(train_df))
+        mlflow.log_metric("val_rows", len(val_df))
+        mlflow.log_metric("test_rows", len(test_df))
+
+        # artifacts
+        mlflow.log_artifacts(str(outdir), artifact_path="processed_data")
+
+        print(f"[PREPROCESS] run_id={run_id}")
+        print(f"[PREPROCESS] labels={labels}")
+        print("[PREPROCESS] processed_data/: train.csv, val.csv, test.csv, label_mapping.json, sample.jsonl")
 
 if __name__ == "__main__":
     main()
