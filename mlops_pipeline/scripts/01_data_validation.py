@@ -29,11 +29,6 @@ def _safe_ratio(n: int, d: int) -> float:
     return float(n) / float(d) if d else 0.0
 
 def main():
-    base_dir = os.getcwd()
-    tracking_path = os.path.join(base_dir, "mlruns_temp")
-    os.makedirs(tracking_path, exist_ok=True)
-    mlflow.set_tracking_uri(f"file:{tracking_path}")
-    os.makedirs("validation", exist_ok=True)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
     with mlflow.start_run():
         mlflow.set_tag("ml.step", "data_validation")
