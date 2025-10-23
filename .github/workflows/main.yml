@@ -71,7 +71,7 @@ jobs:
         echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Run Model Training, Evaluation, and Registration
-      run: python mlops_pipeline/scripts/03_train_evaluate_register.py ${{ steps.preprocessing.outputs.run_id }} 0.5 word (1,4) 800000 1.2
+      run: python mlops_pipeline/scripts/03_train_evaluate_register.py ${{ steps.preprocessing.outputs.run_id }} 0.5 word "(1,4)"" 800000 1.2
 
     - name: Transition Model to Staging
       if: success()
