@@ -209,11 +209,14 @@ if __name__ == "__main__":
     run_id = sys.argv[1]
     C = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
     analyzer = sys.argv[3] if len(sys.argv) > 3 else "word"
+
+    # ✅ แปลง "(1,4)" -> (1, 4) อย่างปลอดภัย
     if len(sys.argv) > 4:
         ng_min, ng_max = sys.argv[4].strip("()").split(",")
         ngram_range = (int(ng_min), int(ng_max))
     else:
         ngram_range = (1, 2)
+
     max_features = int(sys.argv[5]) if len(sys.argv) > 5 else 60000
     sentiment_weight = float(sys.argv[6]) if len(sys.argv) > 6 else 1.0
 
