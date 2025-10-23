@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/NBODT/Documents/GitHub/mlops_final/mlruns/540076204228482136/8b333822a2d64715a97ca55db3bd120f/artifacts
+end_time: 1761238852894
+entry_point_name: ''
+experiment_id: '540076204228482136'
+lifecycle_stage: active
+run_id: 8b333822a2d64715a97ca55db3bd120f
+run_name: tfidf_sentiment_C_0.4
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1761238666249
+status: 3
+tags: []
+user_id: NBKKBS

@@ -1,0 +1,10 @@
+artifact_location: file:///C:/Users/NBODT/Documents/GitHub/mlops_final/mlruns/540076204228482136/models/m-68af1d721be54bb08370a0952a01caf4/artifacts
+creation_timestamp: 1761238832826
+experiment_id: '540076204228482136'
+last_updated_timestamp: 1761238852501
+model_id: m-68af1d721be54bb08370a0952a01caf4
+model_type: null
+name: model
+source_run_id: 8b333822a2d64715a97ca55db3bd120f
+status: 2
+status_message: null

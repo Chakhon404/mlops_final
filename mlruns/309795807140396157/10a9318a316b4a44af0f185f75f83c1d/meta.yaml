@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/NBODT/Documents/GitHub/mlops_final/mlruns/309795807140396157/10a9318a316b4a44af0f185f75f83c1d/artifacts
+end_time: 1761237938321
+entry_point_name: ''
+experiment_id: '309795807140396157'
+lifecycle_stage: active
+run_id: 10a9318a316b4a44af0f185f75f83c1d
+run_name: inquisitive-bear-220
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1761237931879
+status: 3
+tags: []
+user_id: NBKKBS
