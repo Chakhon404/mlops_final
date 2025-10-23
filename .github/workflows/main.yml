@@ -61,6 +61,10 @@ jobs:
         pip install nltk
         python -m nltk.downloader vader_lexicon --quiet
 
+    - name: Set MLflow tracking path (Linux safe)
+      run: |
+        export MLFLOW_TRACKING_URI=file:./mlruns_temp
+
     - name: Run Data Validation
       run: python mlops_pipeline/scripts/01_data_validation.py
 
