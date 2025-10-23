@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/NBODT/Documents/GitHub/mlops_final/mlruns/426165368285169605/d83f1ee6e75447f3a15463d976ece0dc/artifacts
+end_time: 1761247367226
+entry_point_name: ''
+experiment_id: '426165368285169605'
+lifecycle_stage: active
+run_id: d83f1ee6e75447f3a15463d976ece0dc
+run_name: valuable-wolf-490
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1761247362715
+status: 3
+tags: []
+user_id: NBKKBS

@@ -1,4 +1,3 @@
-# 03_train_evaluate_register.py
 import sys, os, json, shutil
 from pathlib import Path
 import numpy as np
@@ -20,9 +19,13 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 # ===== Config =====
 EXPERIMENT = "MentalHealth - Model Training"
 MODEL_NAME = "mental-health-classifier"
+ARTIFACT_DIR = "artifacts/training"
+os.makedirs(ARTIFACT_DIR, exist_ok=True)
+
 ACCURACY_THRESHOLD = 0.70
 MACROF1_THRESHOLD = 0.70
 RANDOM_STATE = 42
+
 
 # -----------------------------
 # Helper: แปลง DataFrame → list ของข้อความ
@@ -42,6 +45,7 @@ def coerce_to_1d_text(X):
         return np.asarray(X, dtype=str)
     return np.asarray(X, dtype=str)
 
+
 # -----------------------------
 # Feature Extractor: Sentiment Score
 # -----------------------------
@@ -49,17 +53,23 @@ class SentimentScore(BaseEstimator, TransformerMixin):
     def __init__(self, weight=1.0):
         self.weight = weight
         self.analyzer = SentimentIntensityAnalyzer()
-    def fit(self, X, y=None): return self
+
+    def fit(self, X, y=None): 
+        return self
+
     def transform(self, X):
-        if isinstance(X, pd.DataFrame): texts = X["text"].astype(str)
-        else: texts = pd.Series(X).astype(str)
+        if isinstance(X, pd.DataFrame):
+            texts = X["text"].astype(str)
+        else:
+            texts = pd.Series(X).astype(str)
         scores = texts.apply(lambda t: self.analyzer.polarity_scores(t)["compound"])
         return (scores * self.weight).to_numpy().reshape(-1, 1)
+
 
 # -----------------------------
 # Helper: วาด Confusion Matrix แล้ว log เข้า MLflow
 # -----------------------------
-def _plot_and_log_cm(cm, labels_sorted, name_png, title, artifact_dir="evaluation"):
+def _plot_and_log_cm(cm, labels_sorted, filename, title, artifact_dir="evaluation"):
     plt.figure(figsize=(8, 7))
     plt.imshow(cm, interpolation='nearest')
     plt.title(title)
@@ -67,9 +77,10 @@ def _plot_and_log_cm(cm, labels_sorted, name_png, title, artifact_dir="evaluatio
     plt.xticks(range(len(labels_sorted)), labels_sorted, rotation=45, ha="right")
     plt.yticks(range(len(labels_sorted)), labels_sorted)
     plt.tight_layout()
-    plt.savefig(name_png, dpi=150)
+    plt.savefig(filename, dpi=150)
     plt.close()
-    mlflow.log_artifact(name_png, artifact_path=artifact_dir)
+    mlflow.log_artifact(filename, artifact_path=artifact_dir)
+
 
 # -----------------------------
 # Main Function
@@ -92,13 +103,15 @@ def train_evaluate_register(preprocessing_run_id: str,
               f"max_features={max_features}, sentiment_weight={sentiment_weight}")
         mlflow.set_tag("ml.step", "model_training_evaluation")
 
-        # log hyperparams
-        mlflow.log_param("C", C)
-        mlflow.log_param("analyzer", analyzer)
-        mlflow.log_param("ngram_range", ngram_range)
-        mlflow.log_param("max_features", max_features)
-        mlflow.log_param("sentiment_weight", sentiment_weight)
-        mlflow.log_param("clf", "LinearSVC_balanced")
+        # Log hyperparams
+        mlflow.log_params({
+            "C": C,
+            "analyzer": analyzer,
+            "ngram_range": ngram_range,
+            "max_features": max_features,
+            "sentiment_weight": sentiment_weight,
+            "clf": "LinearSVC_balanced"
+        })
 
         # -----------------------------
         # 1) โหลดข้อมูลจาก preprocessing artifacts
@@ -159,23 +172,26 @@ def train_evaluate_register(preprocessing_run_id: str,
         y_pred = pipe.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         f1m = f1_score(y_test, y_pred, average="macro")
-        mlflow.log_metric("test_accuracy", acc)
-        mlflow.log_metric("test_macro_f1", f1m)
+        mlflow.log_metrics({"test_accuracy": acc, "test_macro_f1": f1m})
         print(f"[EVAL] test_accuracy={acc:.4f}, test_macro_f1={f1m:.4f}")
 
         # -----------------------------
-        # 4) Log reports + artifacts
+        # 4) Log reports + confusion matrix
         # -----------------------------
         report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
-        with open("classification_report.json", "w", encoding="utf-8") as f:
+        report_path = os.path.join(ARTIFACT_DIR, "classification_report.json")
+        with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
-        mlflow.log_artifact("classification_report.json", artifact_path="evaluation")
+        mlflow.log_artifact(report_path, artifact_path="training")
 
         labels_sorted = sorted(set(list(y_test) + list(y_pred)))
         cm = confusion_matrix(y_test, y_pred, labels=labels_sorted)
-        _plot_and_log_cm(cm, labels_sorted, "confusion_matrix.png", "Confusion Matrix")
+        cm_path = os.path.join(ARTIFACT_DIR, "confusion_matrix.png")
+        cmn_path = os.path.join(ARTIFACT_DIR, "confusion_matrix_normalized.png")
+
+        _plot_and_log_cm(cm, labels_sorted, cm_path, "Confusion Matrix")
         cm_norm = cm.astype("float") / (cm.sum(axis=1)[:, np.newaxis] + 1e-9)
-        _plot_and_log_cm(cm_norm, labels_sorted, "confusion_matrix_normalized.png", "Confusion Matrix (normalized)")
+        _plot_and_log_cm(cm_norm, labels_sorted, cmn_path, "Confusion Matrix (normalized)")
 
         # -----------------------------
         # 5) Log model + register
@@ -185,8 +201,9 @@ def train_evaluate_register(preprocessing_run_id: str,
                                  input_example=input_example,
                                  registered_model_name=None)
 
-        shutil.copy(os.path.join(local_artifact_path, "label_mapping.json"), "label_mapping.json")
-        mlflow.log_artifact("label_mapping.json", artifact_path="preprocessing")
+        label_map_dest = os.path.join(ARTIFACT_DIR, "label_mapping.json")
+        shutil.copy(os.path.join(local_artifact_path, "label_mapping.json"), label_map_dest)
+        mlflow.log_artifact(label_map_dest, artifact_path="training")
 
         if (acc >= ACCURACY_THRESHOLD) and (f1m >= MACROF1_THRESHOLD):
             print("[REGISTER] Passed threshold -> registering model...")
@@ -198,8 +215,9 @@ def train_evaluate_register(preprocessing_run_id: str,
 
         print("Training run finished.")
 
+
 # -----------------------------
-# CLI
+# CLI Entry
 # -----------------------------
 if __name__ == "__main__":
     if len(sys.argv) < 2:
