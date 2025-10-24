@@ -12,7 +12,7 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 # ===== โหลดโมเดล =====
 try:
     model = joblib.load(MODEL_PATH)
-    print(f"✅ Model loaded successfully from: {MODEL_PATH}")
+    print(f"Model loaded successfully from: {MODEL_PATH}")
 except Exception as e:
     print(f"❌ Failed to load model: {e}")
     model = None

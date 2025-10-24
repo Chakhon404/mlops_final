@@ -19,6 +19,8 @@ curl -X POST http://127.0.0.1:5001/invocations -H "Content-Type: application/jso
 
 uvicorn templates.app:app --host 127.0.0.1 --port 5002 --reload
 
+uvicorn templates.appml:appml --host 127.0.0.1 --port 5002 --reload
+
 **ทดสอบ API โดยตรง (Single Line):**
 
 curl -X POST http://127.0.0.1:5002/predict -H "Content-Type: application/json" -d "{\"text\":[\"I feel anxious today\",\"Life is good and calm\"]}"

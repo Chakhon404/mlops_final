@@ -12,4 +12,3 @@ uvicorn
 pandas
 joblib
 python-multipart
-langdetect
