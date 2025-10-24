@@ -13,7 +13,7 @@ def load_and_predict():
 
     try:
         model = mlflow.pyfunc.load_model(model_uri=f"models:/{MODEL_NAME}/{MODEL_STAGE}")
-        print("✅ Model loaded successfully.")
+        print("Model loaded successfully.")
     except mlflow.exceptions.MlflowException as e:
         print(f"\nError loading model: {e}")
         print(f"Please make sure a model version is in the '{MODEL_STAGE}' stage in MLflow UI.")

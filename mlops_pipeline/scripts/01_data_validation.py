@@ -5,9 +5,7 @@ import mlflow
 import matplotlib.pyplot as plt
 from typing import Dict, Any
 
-# =========================
 # CONFIG
-# =========================
 MLFLOW_EXPERIMENT = "MentalHealth - Data Validation"
 ARTIFACT_DIR = "artifacts/validation"
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
@@ -59,9 +57,7 @@ def main():
         mlflow.log_param("mapped_text_col", text_col)
         mlflow.log_param("mapped_label_col", label_col)
 
-        # -----------------------------
         # Basic stats
-        # -----------------------------
         num_rows, num_cols = df.shape
         num_missing_text = df["text"].isna().sum()
         num_missing_label = df["label"].isna().sum()
@@ -77,9 +73,7 @@ def main():
         })
         mlflow.log_param("nunique_labels", int(nunique_labels))
 
-        # -----------------------------
         # Text length (tokens) stats
-        # -----------------------------
         text_series = df["text"].fillna("").astype(str)
         token_len = text_series.str.split().apply(len)
 
@@ -108,9 +102,7 @@ def main():
         plt.savefig(path_hist, dpi=150)
         mlflow.log_artifact(path_hist, artifact_path="validation")
 
-        # -----------------------------
         # Label distribution
-        # -----------------------------
         label_counts = df["label"].value_counts(dropna=True).sort_values(ascending=False)
         path_label_csv = os.path.join(ARTIFACT_DIR, "label_counts.csv")
         label_counts.to_csv(path_label_csv)
@@ -127,9 +119,7 @@ def main():
         majority_prop = _safe_ratio(label_counts.max(), label_counts.sum())
         mlflow.log_metric("majority_class_proportion", majority_prop)
 
-        # -----------------------------
         # Anomalies detection
-        # -----------------------------
         anomalies = []
         allowed = _load_allowed_labels()
 
@@ -183,9 +173,6 @@ def main():
         if majority_prop >= 0.60 and nunique_labels >= 2:
             anomalies.append("class_imbalance_gt_60pct")
 
-        # -----------------------------
-        # Export anomalies & schema
-        # -----------------------------
         bad_mask = (
             df["text"].isna()
             | (df["text"].astype(str).str.strip() == "")

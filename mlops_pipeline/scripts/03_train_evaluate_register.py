@@ -27,9 +27,7 @@ MACROF1_THRESHOLD = 0.70
 RANDOM_STATE = 42
 
 
-# -----------------------------
 # Helper: แปลง DataFrame → list ของข้อความ
-# -----------------------------
 def coerce_to_1d_text(X):
     import pandas as pd, numpy as np
     if isinstance(X, pd.DataFrame):
@@ -46,9 +44,7 @@ def coerce_to_1d_text(X):
     return np.asarray(X, dtype=str)
 
 
-# -----------------------------
 # Feature Extractor: Sentiment Score
-# -----------------------------
 class SentimentScore(BaseEstimator, TransformerMixin):
     def __init__(self, weight=1.0):
         self.weight = weight
@@ -66,9 +62,7 @@ class SentimentScore(BaseEstimator, TransformerMixin):
         return (scores * self.weight).to_numpy().reshape(-1, 1)
 
 
-# -----------------------------
 # Helper: วาด Confusion Matrix แล้ว log เข้า MLflow
-# -----------------------------
 def _plot_and_log_cm(cm, labels_sorted, filename, title, artifact_dir="evaluation"):
     plt.figure(figsize=(8, 7))
     plt.imshow(cm, interpolation='nearest')
@@ -82,9 +76,7 @@ def _plot_and_log_cm(cm, labels_sorted, filename, title, artifact_dir="evaluatio
     mlflow.log_artifact(filename, artifact_path=artifact_dir)
 
 
-# -----------------------------
 # Main Function
-# -----------------------------
 def train_evaluate_register(preprocessing_run_id: str,
                             C: float = 1.0,
                             analyzer: str = "word",
@@ -113,9 +105,9 @@ def train_evaluate_register(preprocessing_run_id: str,
             "clf": "LinearSVC_balanced"
         })
 
-        # -----------------------------
+    
         # 1) โหลดข้อมูลจาก preprocessing artifacts
-        # -----------------------------
+    
         local_artifact_path = download_artifacts(
             run_id=preprocessing_run_id,
             artifact_path="processed_data"
@@ -140,9 +132,9 @@ def train_evaluate_register(preprocessing_run_id: str,
         X_trainval = pd.concat([X_train, X_val], ignore_index=True)
         y_trainval = pd.concat([y_train, y_val], ignore_index=True)
 
-        # -----------------------------
+    
         # 2) Pipeline: TF-IDF + SentimentScore + LinearSVC
-        # -----------------------------
+    
         pipe = Pipeline([
             ("coerce_text", FunctionTransformer(coerce_to_1d_text, validate=False)),
             ("features", FeatureUnion([
@@ -166,18 +158,18 @@ def train_evaluate_register(preprocessing_run_id: str,
 
         pipe.fit(X_trainval, y_trainval)
 
-        # -----------------------------
+    
         # 3) Evaluate
-        # -----------------------------
+    
         y_pred = pipe.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         f1m = f1_score(y_test, y_pred, average="macro")
         mlflow.log_metrics({"test_accuracy": acc, "test_macro_f1": f1m})
         print(f"[EVAL] test_accuracy={acc:.4f}, test_macro_f1={f1m:.4f}")
 
-        # -----------------------------
+    
         # 4) Log reports + confusion matrix
-        # -----------------------------
+    
         report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
         report_path = os.path.join(ARTIFACT_DIR, "classification_report.json")
         with open(report_path, "w", encoding="utf-8") as f:
@@ -193,9 +185,9 @@ def train_evaluate_register(preprocessing_run_id: str,
         cm_norm = cm.astype("float") / (cm.sum(axis=1)[:, np.newaxis] + 1e-9)
         _plot_and_log_cm(cm_norm, labels_sorted, cmn_path, "Confusion Matrix (normalized)")
 
-        # -----------------------------
+    
         # 5) Log model + register
-        # -----------------------------
+    
         input_example = pd.DataFrame({"text": ["I feel stressed and anxious about exams"]})
         mlflow.sklearn.log_model(pipe, artifact_path="model",
                                  input_example=input_example,
@@ -216,9 +208,7 @@ def train_evaluate_register(preprocessing_run_id: str,
         print("Training run finished.")
 
 
-# -----------------------------
 # CLI Entry
-# -----------------------------
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python scripts/03_train_evaluate_register.py <preprocessing_run_id> [C] [analyzer] [ngram_min,ngram_max] [max_features] [sentiment_weight]")

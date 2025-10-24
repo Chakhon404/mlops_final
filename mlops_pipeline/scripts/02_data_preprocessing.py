@@ -38,13 +38,12 @@ def main(test_size=0.2, val_size=0.1, random_state=42):
         data_csv = os.getenv("DATA_CSV", "data/mental_health.csv")
         data_csv_path = Path(data_csv)
         if not data_csv_path.exists():
-            # เผื่อคุณรันบนสภาพแวดล้อมที่มีไฟล์ใน /mnt/data (เช่น Colab/VM)
             alt = Path("/mnt/data/mental_health.csv")
             if alt.exists():
                 data_csv_path = alt
         df = pd.read_csv(data_csv_path)
 
-        # hash ของไฟล์ดิบ
+        # hash ของไฟล์
         try:
             data_hash = sha256_of_file(data_csv_path)
             mlflow.log_param("data_version_sha256", data_hash)
@@ -88,11 +87,8 @@ def main(test_size=0.2, val_size=0.1, random_state=42):
         mlflow.log_param("n_classes", len(labels))
 
         # --- stratify safety check ---
-        # sklearn ต้องการอย่างน้อย 2 ตัวอย่างต่อคลาสเพื่อ stratify
         too_small = {k: v for k, v in label_counts.items() if v < 2}
         if len(too_small) > 0:
-            # ทางเลือก: ตัดคลาสเล็กทิ้งก่อน split (หรือ raise Exception)
-            # ที่นี่จะตัดทิ้งและ log เตือน
             drop_idxs = df["label"].isin(list(too_small.keys()))
             mlflow.log_dict(too_small, "dropped_tiny_classes.json")
             df = df[~drop_idxs].copy()
