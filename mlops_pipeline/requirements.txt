@@ -11,3 +11,5 @@ fastapi
 uvicorn
 pandas
 joblib
+python-multipart
+langdetect
