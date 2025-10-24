@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 import mlflow
 
 MLFLOW_EXPERIMENT = "MentalHealth - Data Preprocessing"
-MODEL_NAME = "mental-health-classifier"  # (ยังไม่ได้ใช้ในสเต็ปนี้ แต่เก็บไว้ได้)
+MODEL_NAME = "mental-health-classifier"
 
 # --- Fallback clean_text ---
 try:
