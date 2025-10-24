@@ -35,14 +35,15 @@ jobs:
       run: |
         pytest || (if [ $? -eq 5 ]; then echo "Pytest finished: No tests found."; exit 0; else exit $?; fi)
 
-  # --- JOB สำหรับ Train + Register ---
+
   build-and-train:
     needs: ci-checks
     runs-on: ubuntu-latest
 
     env:
-      # ใช้ local tracking URI แทน secrets สำหรับ workflow นี้
-      MLFLOW_TRACKING_URI: file:./mlruns_temp
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
 
     steps:
     - name: Checkout repository
@@ -60,33 +61,27 @@ jobs:
         pip install nltk
         python -m nltk.downloader vader_lexicon --quiet
 
-    # ตรวจสอบและสร้างโฟลเดอร์ mlruns_temp
-    - name: Prepare MLflow directory
-      run: mkdir -p mlruns_temp && echo "Created local MLflow dir: mlruns_temp"
+    - name: Set MLflow tracking path (Linux safe)
+      run: |
+        export MLFLOW_TRACKING_URI=file:./mlruns_temp
+        echo "MLFLOW_TRACKING_URI=file:./mlruns_temp" >> $GITHUB_ENV
 
-    # Data Validation
     - name: Run Data Validation
       run: python mlops_pipeline/scripts/01_data_validation.py
 
-    # Data Preprocessing
     - name: Run Data Preprocessing
       id: preprocessing
       run: |
         RUN_ID=$(python mlops_pipeline/scripts/02_data_preprocessing.py | grep "run_id=" | cut -d'=' -f2)
         echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
-    # Model Training + Evaluation + Register
     - name: Run Model Training, Evaluation, and Registration
-      run: |
-        echo "Using run_id: ${{ steps.preprocessing.outputs.run_id }}"
-        python mlops_pipeline/scripts/03_train_evaluate_register.py ${{ steps.preprocessing.outputs.run_id }} 0.4 word "(1,4)" 444444 1.4
+      run: python mlops_pipeline/scripts/03_train_evaluate_register.py ${{ steps.preprocessing.outputs.run_id }} 0.5 word "(1,4)" 800000 1.2
 
-    # Transition Model
     - name: Transition Model to Staging
       if: success()
       run: python mlops_pipeline/scripts/04_transition_model.py "mental-health-classifier" "Staging"
 
-    # Upload artifacts
     - name: Upload MLflow artifacts for inspection
       if: success()
       uses: actions/upload-artifact@v4
